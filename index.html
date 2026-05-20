@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Colegios de Bolivia — OpenStreetMap</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Leaflet MarkerCluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+      z-index: 1000;
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #f8fafc;
+      white-space: nowrap;
+    }
+    header h1 span { color: #f59e0b; }
+
+    .osm-badge {
+      font-size: 0.65rem;
+      background: #059669;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      flex: 1;
+    }
+
+    .controls label {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      white-space: nowrap;
+    }
+
+    select {
+      background: #0f172a;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      min-width: 160px;
+    }
+    select:focus { outline: 2px solid #f59e0b; }
+
+    .btn {
+      background: #f59e0b;
+      color: #0f172a;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: #fbbf24; }
+    .btn:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; }
+
+    .btn-secondary {
+      background: #1e40af;
+      color: #e2e8f0;
+    }
+    .btn-secondary:hover { background: #2563eb; }
+
+    /* ── STATUS BAR ── */
+    #statusBar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 20px;
+      background: #0f172a;
+      border-bottom: 1px solid #1e293b;
+      font-size: 0.75rem;
+      color: #64748b;
+      flex-shrink: 0;
+    }
+
+    #statusBar .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #64748b;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    #statusBar .dot.loading { background: #f59e0b; animation: pulse 1s infinite; }
+    #statusBar .dot.ok      { background: #10b981; }
+    #statusBar .dot.error   { background: #ef4444; }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    #countBadge {
+      margin-left: auto;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 0.72rem;
+      color: #cbd5e1;
+    }
+
+    #nextUpdate {
+      color: #475569;
+      font-size: 0.72rem;
+    }
+
+    /* ── MAP ── */
+    #map {
+      flex: 1;
+      width: 100%;
+    }
+
+    /* ── POPUP ── */
+    .leaflet-popup-content-wrapper {
+      background: #1e293b !important;
+      color: #e2e8f0 !important;
+      border: 1px solid #334155 !important;
+      border-radius: 8px !important;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+    }
+    .leaflet-popup-tip { background: #1e293b !important; }
+
+    .popup-title {
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: #f8fafc;
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+    .popup-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      padding: 2px 0;
+      border-bottom: 1px solid #334155;
+      gap: 8px;
+    }
+    .popup-row:last-child { border-bottom: none; }
+    .popup-key { color: #94a3b8; }
+    .popup-val { color: #e2e8f0; text-align: right; max-width: 160px; word-break: break-word; }
+
+    .osm-link {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 0.72rem;
+      color: #60a5fa;
+      text-decoration: none;
+    }
+    .osm-link:hover { text-decoration: underline; }
+
+    /* ── SIDEBAR INFO ── */
+    #sidebar {
+      position: absolute;
+      top: 110px;
+      right: 12px;
+      z-index: 900;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px 14px;
+      min-width: 180px;
+      font-size: 0.78rem;
+      color: #cbd5e1;
+      pointer-events: none;
+    }
+    #sidebar h3 { font-size: 0.8rem; color: #f59e0b; margin-bottom: 8px; }
+    .stat-row { display: flex; justify-content: space-between; padding: 2px 0; }
+    .stat-num { font-weight: 700; color: #f8fafc; }
+
+    /* ── OSM ATTRIBUTION ── */
+    .leaflet-control-attribution {
+      background: rgba(15,23,42,0.85) !important;
+      color: #94a3b8 !important;
+      font-size: 0.68rem !important;
+    }
+    .leaflet-control-attribution a { color: #60a5fa !important; }
+
+    /* ── SPINNER OVERLAY ── */
+    #loadingOverlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(15,23,42,0.7);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      gap: 12px;
+      font-size: 0.9rem;
+      color: #e2e8f0;
+    }
+    #loadingOverlay.hidden { display: none; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 4px solid #334155;
+      border-top-color: #f59e0b;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── TOAST ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 0.82rem;
+      color: #e2e8f0;
+      z-index: 3000;
+      transition: transform 0.3s ease;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+    #toast.success { border-color: #10b981; }
+    #toast.error   { border-color: #ef4444; }
+  </style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <h1>🏫 Colegios <span>Bolivia</span></h1>
+  <span class="osm-badge">© OpenStreetMap contributors</span>
+
+  <div class="controls">
+    <label for="deptSelect">Departamento:</label>
+    <select id="deptSelect">
+      <option value="all">Todos los departamentos</option>
+      <option value="La Paz">La Paz</option>
+      <option value="Cochabamba">Cochabamba</option>
+      <option value="Santa Cruz">Santa Cruz</option>
+      <option value="Oruro">Oruro</option>
+      <option value="Potosí">Potosí</option>
+      <option value="Chuquisaca">Chuquisaca</option>
+      <option value="Tarija">Tarija</option>
+      <option value="Beni">Beni</option>
+      <option value="Pando">Pando</option>
+    </select>
+
+    <button class="btn" id="btnRefresh">↻ Actualizar ahora</button>
+    <button class="btn btn-secondary" id="btnAutoToggle">⏸ Pausar auto</button>
+  </div>
+</header>
+
+<!-- ── STATUS BAR ── -->
+<div id="statusBar">
+  <div class="dot" id="statusDot"></div>
+  <span id="statusText">Listo</span>
+  <span id="nextUpdate"></span>
+  <span id="countBadge">0 colegios</span>
+</div>
+
+<!-- ── MAP CONTAINER ── -->
+<div style="position:relative; flex:1; display:flex; flex-direction:column;">
+  <div id="map"></div>
+
+  <!-- Sidebar stats -->
+  <div id="sidebar">
+    <h3>📊 Estadísticas</h3>
+    <div class="stat-row"><span>Total Bolivia</span><span class="stat-num" id="statTotal">—</span></div>
+    <div class="stat-row"><span>Filtrado</span><span class="stat-num" id="statFiltered">—</span></div>
+    <div class="stat-row"><span>Con nombre</span><span class="stat-num" id="statNamed">—</span></div>
+    <div class="stat-row"><span>Última actualización</span></div>
+    <div style="font-size:0.7rem;color:#64748b;margin-top:2px" id="statTime">—</div>
+  </div>
+
+  <!-- Loading overlay -->
+  <div id="loadingOverlay" class="hidden">
+    <div class="spinner"></div>
+    <span id="loadingMsg">Consultando OpenStreetMap…</span>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet MarkerCluster -->
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  CONFIGURACIÓN
+// ═══════════════════════════════════════════════════════
+const CONFIG = {
+  overpassUrl: 'https://overpass-api.de/api/interpreter',
+  // Espejo alternativo si el principal falla:
+  overpassMirror: 'https://overpass.kumi.systems/api/interpreter',
+  refreshInterval: 5 * 60 * 1000, // 5 minutos en ms
+  userAgent: 'BoliviaColegiosMap/1.0 (leoleder1@gmail.com)',
+};
+
+// Bounding boxes aproximados por departamento (sur, oeste, norte, este)
+const DEPT_BBOX = {
+  'La Paz':      [-17.5, -70.0, -13.5, -67.5],
+  'Cochabamba':  [-18.3, -66.8, -16.0, -64.5],
+  'Santa Cruz':  [-21.5, -64.5, -13.5, -57.0],
+  'Oruro':       [-21.5, -68.5, -17.0, -66.5],
+  'Potosí':      [-23.0, -68.0, -18.5, -64.5],
+  'Chuquisaca':  [-22.0, -65.5, -18.0, -63.0],
+  'Tarija':      [-23.0, -65.2, -20.5, -62.5],
+  'Beni':        [-16.0, -68.5, -9.5,  -60.0],
+  'Pando':       [-13.0, -70.5, -9.5,  -65.5],
+};
+
+// Bolivia completa
+const BOLIVIA_BBOX = [-23.0, -70.5, -9.5, -57.0];
+
+// ═══════════════════════════════════════════════════════
+//  ESTADO
+// ═══════════════════════════════════════════════════════
+let allSchools = [];          // todos los datos cargados
+let currentDept = 'all';
+let autoRefresh = true;
+let refreshTimer = null;
+let countdownTimer = null;
+let nextRefreshAt = null;
+let usesMirror = false;
+
+// ═══════════════════════════════════════════════════════
+//  MAPA
+// ═══════════════════════════════════════════════════════
+const map = L.map('map', {
+  center: [-16.5, -65.0],
+  zoom: 6,
+  zoomControl: true,
+});
+
+// Capa base OSM (atribución completa requerida por la licencia ODbL)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution:
+    '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors, ' +
+    'datos bajo licencia <a href="https://opendatacommons.org/licenses/odbl/" target="_blank">ODbL</a>',
+}).addTo(map);
+
+// Cluster de marcadores
+let clusterGroup = L.markerClusterGroup({
+  chunkedLoading: true,
+  maxClusterRadius: 50,
+  spiderfyOnMaxZoom: true,
+  showCoverageOnHover: false,
+});
+map.addLayer(clusterGroup);
+
+// Icono personalizado
+const schoolIcon = L.divIcon({
+  className: '',
+  html: `<div style="
+    background:#f59e0b;
+    border:2px solid #92400e;
+    border-radius:50% 50% 50% 0;
+    transform:rotate(-45deg);
+    width:22px;height:22px;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 2px 6px rgba(0,0,0,0.4);
+  "><span style="transform:rotate(45deg);font-size:11px;">🏫</span></div>`,
+  iconSize: [22, 22],
+  iconAnchor: [11, 22],
+  popupAnchor: [0, -24],
+});
+
+// ═══════════════════════════════════════════════════════
+//  OVERPASS QUERY
+// ═══════════════════════════════════════════════════════
+function buildQuery(dept) {
+  const bbox = dept === 'all' ? BOLIVIA_BBOX : DEPT_BBOX[dept];
+  if (!bbox) return null;
+
+  const [s, w, n, e] = bbox;
+  const bboxStr = `${s},${w},${n},${e}`;
+
+  // Busca nodos, vías y relaciones con amenity=school O building=school dentro del bbox
+  return `
+[out:json][timeout:60];
+(
+  node["amenity"="school"](${bboxStr});
+  node["amenity"="college"](${bboxStr});
+  node["building"="school"](${bboxStr});
+  way["amenity"="school"](${bboxStr});
+  way["amenity"="college"](${bboxStr});
+  relation["amenity"="school"](${bboxStr});
+);
+out center qt;
+`.trim();
+}
+
+// ═══════════════════════════════════════════════════════
+//  FETCH CON FALLBACK A ESPEJO
+// ═══════════════════════════════════════════════════════
+async function fetchOverpass(query) {
+  const urls = [CONFIG.overpassUrl, CONFIG.overpassMirror];
+  const body = new URLSearchParams({ data: query });
+
+  for (let i = 0; i < urls.length; i++) {
+    try {
+      const resp = await fetch(urls[i], {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json',
+        },
+        body: body.toString(),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      usesMirror = i > 0;
+      return await resp.json();
+    } catch (err) {
+      if (i === urls.length - 1) throw err;
+      console.warn(`Servidor Overpass ${urls[i]} falló, probando espejo…`);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  PARSEAR ELEMENTOS OSM → { lat, lon, tags, id, type }
+// ═══════════════════════════════════════════════════════
+function parseElements(elements) {
+  return elements
+    .map(el => {
+      let lat, lon;
+      if (el.type === 'node') {
+        lat = el.lat; lon = el.lon;
+      } else if (el.center) {
+        lat = el.center.lat; lon = el.center.lon;
+      } else {
+        return null;
+      }
+      return { id: el.id, type: el.type, lat, lon, tags: el.tags || {} };
+    })
+    .filter(Boolean);
+}
+
+// ═══════════════════════════════════════════════════════
+//  INFERIR DEPARTAMENTO desde coordenadas (aproximado)
+// ═══════════════════════════════════════════════════════
+function inferDept(lat, lon) {
+  for (const [dept, [s, w, n, e]] of Object.entries(DEPT_BBOX)) {
+    if (lat >= s && lat <= n && lon >= w && lon <= e) return dept;
+  }
+  return 'Bolivia';
+}
+
+// ═══════════════════════════════════════════════════════
+//  RENDERIZAR MARCADORES
+// ═══════════════════════════════════════════════════════
+function renderMarkers(schools) {
+  clusterGroup.clearLayers();
+
+  let named = 0;
+
+  schools.forEach(s => {
+    const name = s.tags.name || s.tags['name:es'] || '(sin nombre)';
+    if (s.tags.name) named++;
+
+    const dept = s.tags['addr:state'] || s.tags['is_in:department'] || inferDept(s.lat, s.lon);
+    const marker = L.marker([s.lat, s.lon], { icon: schoolIcon });
+
+    // Construir popup
+    const rows = [
+      ['Nombre', name],
+      ['Tipo',   s.tags.amenity || s.tags.building || '—'],
+      ['Departamento', dept],
+      s.tags.operator       ? ['Operador', s.tags.operator]             : null,
+      s.tags['operator:type'] ? ['Gestión', s.tags['operator:type']]   : null,
+      s.tags.levels         ? ['Niveles', s.tags.levels]               : null,
+      s.tags.capacity       ? ['Capacidad', s.tags.capacity + ' alumnos'] : null,
+      s.tags.phone          ? ['Teléfono', s.tags.phone]               : null,
+      s.tags.website        ? ['Web', `<a href="${s.tags.website}" target="_blank" style="color:#60a5fa">${s.tags.website}</a>`] : null,
+      ['OSM ID', `${s.type}/${s.id}`],
+    ].filter(Boolean);
+
+    const rowsHtml = rows.map(([k, v]) =>
+      `<div class="popup-row"><span class="popup-key">${k}</span><span class="popup-val">${v}</span></div>`
+    ).join('');
+
+    marker.bindPopup(`
+      <div class="popup-title">🏫 ${name}</div>
+      ${rowsHtml}
+      <a class="osm-link" href="https://www.openstreetmap.org/${s.type}/${s.id}" target="_blank">
+        Ver en OpenStreetMap ↗
+      </a>
+    `, { maxWidth: 280 });
+
+    clusterGroup.addLayer(marker);
+  });
+
+  // Actualizar estadísticas
+  document.getElementById('statFiltered').textContent = schools.length.toLocaleString();
+  document.getElementById('statNamed').textContent = named.toLocaleString();
+  document.getElementById('countBadge').textContent = `${schools.length.toLocaleString()} colegios`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  FILTRAR POR DEPARTAMENTO
+// ═══════════════════════════════════════════════════════
+function applyFilter(dept) {
+  let filtered = allSchools;
+  if (dept !== 'all') {
+    filtered = allSchools.filter(s => {
+      const d = s.tags['addr:state'] || s.tags['is_in:department'] || inferDept(s.lat, s.lon);
+      return d === dept;
+    });
+  }
+  renderMarkers(filtered);
+
+  // Zoom al departamento seleccionado
+  if (dept !== 'all' && DEPT_BBOX[dept]) {
+    const [s, w, n, e] = DEPT_BBOX[dept];
+    map.fitBounds([[s, w], [n, e]], { padding: [30, 30] });
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  CARGA PRINCIPAL
+// ═══════════════════════════════════════════════════════
+async function loadSchools(showSpinner = true) {
+  const query = buildQuery(currentDept);
+  if (!query) return;
+
+  setStatus('loading', 'Consultando OpenStreetMap…');
+  if (showSpinner) showLoading('Consultando Overpass API de OpenStreetMap…');
+  document.getElementById('btnRefresh').disabled = true;
+
+  try {
+    const data = await fetchOverpass(query);
+    allSchools = parseElements(data.elements);
+
+    applyFilter(currentDept);
+
+    const now = new Date();
+    document.getElementById('statTotal').textContent = allSchools.length.toLocaleString();
+    document.getElementById('statTime').textContent = now.toLocaleTimeString('es-BO');
+
+    const msg = usesMirror
+      ? `✓ ${allSchools.length} colegios (espejo OSM)`
+      : `✓ ${allSchools.length} colegios cargados`;
+    setStatus('ok', msg);
+    showToast(`Actualizado: ${allSchools.length} colegios encontrados`, 'success');
+
+    scheduleNextRefresh();
+  } catch (err) {
+    console.error(err);
+    setStatus('error', `Error: ${err.message}`);
+    showToast(`Error al consultar OSM: ${err.message}`, 'error');
+    scheduleNextRefresh();
+  } finally {
+    hideLoading();
+    document.getElementById('btnRefresh').disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  AUTO-REFRESH cada 5 minutos
+// ═══════════════════════════════════════════════════════
+function scheduleNextRefresh() {
+  clearTimeout(refreshTimer);
+  clearInterval(countdownTimer);
+
+  if (!autoRefresh) return;
+
+  nextRefreshAt = Date.now() + CONFIG.refreshInterval;
+
+  refreshTimer = setTimeout(() => {
+    loadSchools(false);
+  }, CONFIG.refreshInterval);
+
+  // Countdown en la barra de estado
+  countdownTimer = setInterval(() => {
+    const remaining = Math.max(0, Math.round((nextRefreshAt - Date.now()) / 1000));
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    document.getElementById('nextUpdate').textContent =
+      `Próxima actualización: ${m}:${String(s).padStart(2,'0')}`;
+    if (remaining === 0) clearInterval(countdownTimer);
+  }, 1000);
+}
+
+function stopAutoRefresh() {
+  clearTimeout(refreshTimer);
+  clearInterval(countdownTimer);
+  document.getElementById('nextUpdate').textContent = 'Auto-actualización pausada';
+}
+
+// ═══════════════════════════════════════════════════════
+//  HELPERS UI
+// ═══════════════════════════════════════════════════════
+function setStatus(type, text) {
+  const dot = document.getElementById('statusDot');
+  dot.className = 'dot ' + type;
+  document.getElementById('statusText').textContent = text;
+}
+
+function showLoading(msg) {
+  document.getElementById('loadingMsg').textContent = msg;
+  document.getElementById('loadingOverlay').classList.remove('hidden');
+}
+function hideLoading() {
+  document.getElementById('loadingOverlay').classList.add('hidden');
+}
+
+let toastTimer;
+function showToast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, 3500);
+}
+
+// ═══════════════════════════════════════════════════════
+//  EVENTOS
+// ═══════════════════════════════════════════════════════
+document.getElementById('deptSelect').addEventListener('change', e => {
+  currentDept = e.target.value;
+  // Si ya tenemos datos, filtramos localmente sin re-consultar OSM
+  if (allSchools.length > 0) {
+    applyFilter(currentDept);
+  } else {
+    loadSchools();
+  }
+  // Pero sí recargamos desde OSM para tener datos frescos del área
+  loadSchools(false);
+});
+
+document.getElementById('btnRefresh').addEventListener('click', () => {
+  loadSchools(true);
+});
+
+document.getElementById('btnAutoToggle').addEventListener('click', () => {
+  autoRefresh = !autoRefresh;
+  const btn = document.getElementById('btnAutoToggle');
+  if (autoRefresh) {
+    btn.textContent = '⏸ Pausar auto';
+    btn.className = 'btn btn-secondary';
+    scheduleNextRefresh();
+    showToast('Auto-actualización activada (cada 5 min)', 'success');
+  } else {
+    btn.textContent = '▶ Reanudar auto';
+    btn.className = 'btn';
+    stopAutoRefresh();
+    showToast('Auto-actualización pausada');
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+//  INICIO
+// ═══════════════════════════════════════════════════════
+loadSchools();
+</script>
+</body>
+</html>
